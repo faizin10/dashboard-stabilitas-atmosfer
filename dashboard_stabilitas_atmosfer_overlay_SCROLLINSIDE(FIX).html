@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dashboard Stabilitas Atmosfer — CAPE / CIN / LI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- RainViewer Radar & Satellite -->
+  <script src="https://api.rainviewer.com/public/weather-maps/rainviewer-api.min.js"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <style>
+    :root {
+      --bg-main: #f3f4f6;
+      --bg-panel: rgba(255,255,255,0.25);
+      --bg-panel-solid: #ffffff;
+      --text-main: #111827;
+      --text-muted: #4b5563;
+      --border-subtle: rgba(255,255,255,0.7);
+      --accent: #2563eb;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      overflow: hidden;
+      font-family: system-ui, sans-serif;
+      background: var(--bg-main);
+      color: var(--text-main);
+    }
+
+    h1 {
+      margin: 10px 15px;
+      font-size: 1.4rem;
+    }
+
+    .top-area {
+      padding: 0 15px 10px 15px;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+      align-items: flex-end;
+    }
+
+    .toolbar label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .toolbar input {
+      padding: 5px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+      background: #ffffff;
+      color: var(--text-main);
+      min-width: 110px;
+    }
+
+    .toolbar button {
+      padding: 8px 14px;
+      border-radius: 20px;
+      border: none;
+      background: var(--accent);
+      color: #ffffff;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+
+    .toolbar button:hover {
+      filter: brightness(1.05);
+    }
+
+    .badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+
+    .badge {
+      padding: 6px 12px;
+      background: #e5edff;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      color: #1f2937;
+      border: 1px solid #d1ddff;
+    }
+
+    /* MAP WRAPPER: map full, charts overlay */
+    #map-wrapper {
+      position: relative;
+      height: calc(100vh - 150px);
+      padding: 0 10px 10px 10px;
+      box-sizing: border-box;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 18px 40px rgba(15,23,42,0.18);
+      overflow: hidden;
+    }
+
+    /* Glassmorphism charts overlay */
+    .charts-overlay {
+      position: absolute;
+      top: 18px;
+      left: 24px;
+      width: 360px;
+      max-height: calc(100% - 36px);
+      overflow-y: auto;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 18px 40px rgba(15,23,42,0.28);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+
+    .charts-overlay h3 {
+      margin: 4px 2px;
+      font-size: 0.9rem;
+      color: var(--text-main);
+    }
+
+    .charts-overlay canvas {
+      min-height: 200px;
+
+      width: 100% !important;
+      height: 160px !important;
+      margin-bottom: 10px;
+      background: rgba(255,255,255,0.85);
+      border-radius: 10px;
+      border: 1px solid rgba(209,213,219,0.8);
+    }
+
+    @media (max-width: 900px) {
+      .charts-overlay {
+        width: 90%;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+    }
+
+.charts-overlay {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 360px;
+  max-height: calc(100% - 40px);
+  overflow-y: auto;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.7);
+  border: 1px solid rgba(200,200,200,0.8);
+  backdrop-filter: blur(12px);
+  z-index: 9999;
+}
+.charts-header {
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+  cursor: move;
+  font-weight: bold;
+}
+
+
+.charts-overlay {
+  position:absolute;
+  top:20px;
+  right:20px;
+  width:520px;
+  height: calc(100% - 40px);
+  padding:14px;
+  border-radius:14px;
+  background: rgba(255,255,255,0.7);
+  backdrop-filter: blur(12px);
+  z-index:9999;
+}
+
+.charts-content {
+  overflow-y:auto;
+  height:100%;
+  padding-right:6px;
+}
+
+.charts-overlay canvas {
+  min-height:240px;
+  height:240px !important;
+}
+/* === PATCH: Stabilkan tooltip Chart.js TANPA mengubah layout === */
+.charts-overlay canvas {
+    pointer-events: auto !important;
+}
+
+</style>
+</head>
+
+<body>
+
+<h1>Dashboard Stabilitas Atmosfer — CAPE / CIN / LI</h1>
+
+<!-- AREA ATAS -->
+<div class="top-area">
+
+  <!-- Input koordinat -->
+  <div class="toolbar">
+    <div>
+      <label>Lat</label><br>
+      <input type="number" id="lat" step="0.0001" value="-6.2">
+    </div>
+    <div>
+      <label>Lon</label><br>
+      <input type="number" id="lon" step="0.0001" value="106.8">
+    </div>
+    <div>
+      <label>&nbsp;</label><br>
+      <button id="btnUpdate">Update Grafik</button>
+    </div>
+  </div>
+
+  <!-- Badges ringkas -->
+  <div class="badges">
+    <div class="badge" id="badgeLoc">Lokasi: —</div>
+    <div class="badge" id="badgeCAPE">CAPE: —</div>
+    <div class="badge" id="badgeCIN">CIN: —</div>
+    <div class="badge" id="badgeLI">LI: —</div>
+  </div>
+</div>
+
+<!-- =================== LAYOUT UTAMA =================== -->
+<div id="map-wrapper">
+  <div id="map"></div>
+
+  <!-- PANEL GRAFIK FLOATING (GLASS) -->
+  <div class="charts-overlay">
+<div class="charts-content">
+    <div class="charts-header">📈 Panel Indeks Stabilitas (drag untuk geser)</div>
+    <h3>CAPE</h3>
+    <canvas id="capeChart"></canvas>
+
+    <h3>CIN</h3>
+    <canvas id="cinChart"></canvas>
+
+    <h3>Lifted Index (LI)</h3>
+    <canvas id="liChart"></canvas>
+  </div></div>
+
+<!-- =================== SCRIPT =================== -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+  const latInput = document.getElementById("lat");
+  const lonInput = document.getElementById("lon");
+
+  const badgeLoc  = document.getElementById("badgeLoc");
+  const badgeCAPE = document.getElementById("badgeCAPE");
+  const badgeCIN  = document.getElementById("badgeCIN");
+  const badgeLI   = document.getElementById("badgeLI");
+
+  let map, marker, radarViewer;
+  let capeChart, cinChart, liChart;
+
+  /* ============================
+     INIT MAP
+  ============================ */
+  function initMap() {
+    const lat = parseFloat(latInput.value);
+    const lon = parseFloat(lonInput.value);
+
+    map = L.map("map").setView([lat, lon], 6);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19
+    }).addTo(map);
+
+    marker = L.marker([lat, lon], { draggable:true }).addTo(map);
+
+    map.on("click", e => {
+      latInput.value = e.latlng.lat.toFixed(4);
+      lonInput.value = e.latlng.lng.toFixed(4);
+      marker.setLatLng(e.latlng);
+      refreshData();
+    });
+
+    marker.on("dragend", e => {
+      const {lat, lng} = e.target.getLatLng();
+      latInput.value = lat.toFixed(4);
+      lonInput.value = lng.toFixed(4);
+      refreshData();
+    });
+  }
+
+  /* ============================
+     INIT RADAR + SATELLITE
+  ============================ */
+  function initRadarSatellite() {
+    try {
+      radarViewer = new RainViewer({
+        map: map,
+        position: "topright",
+        animationSpeed: 500,
+        opacity: 0.6,
+        allowUserControls: true,
+      });
+
+      radarViewer.loadRadarData();
+      radarViewer.loadSatelliteData();
+    } catch (e) {
+      console.warn("RainViewer error:", e);
+    }
+  }
+
+  /* ============================
+     FETCH DATA
+  ============================ */
+  async function fetchStability(lat, lon) {
+    const url =
+      "https://api.open-meteo.com/v1/gfs?" +
+      `latitude=${lat}&longitude=${lon}` +
+      "&hourly=cape,convective_inhibition,lifted_index" +
+      "&current=cape,convective_inhibition,lifted_index" +
+      "&past_hours=24&forecast_hours=24&timezone=auto";
+
+    const res = await fetch(url);
+    return res.json();
+  }
+
+  /* ============================
+     UPDATE BADGES
+  ============================ */
+  function updateBadges(data, lat, lon) {
+    const c = data.current;
+
+    badgeLoc.textContent  = `Lokasi: ${lat.toFixed(2)}, ${lon.toFixed(2)}`;
+    badgeCAPE.textContent = `CAPE: ${c.cape?.toFixed(0) ?? "—"} J/kg`;
+    badgeCIN.textContent  = `CIN: ${c.convective_inhibition?.toFixed(0) ?? "—"} J/kg`;
+    badgeLI.textContent   = `LI: ${c.lifted_index?.toFixed(1) ?? "—"}`;
+  }
+
+  /* ============================
+     UPDATE 3 GRAFIK TERPISAH
+  ============================ */
+  function updateCharts(data) {
+    const h = data.hourly;
+    const labels = h.time.map(t => new Date(t).toLocaleString("id-ID",
+      { hour:"2-digit", minute:"2-digit", day:"2-digit", month:"short" }));
+
+    const cape = h.cape;
+    const cin  = h.convective_inhibition.map(v => Math.abs(v));
+    const li   = h.lifted_index;
+
+    /* CAPE */
+    if(capeChart) capeChart.destroy();
+    capeChart = new Chart(document.getElementById("capeChart"), {
+  type:"line",
+  data:{ labels, datasets:[
+    { label:"CAPE (J/kg)", data:cape, borderColor:"#4f9cff", borderWidth:2, tension:0.2 }
+  ] },
+  options: {
+    interaction: { mode: "nearest", intersect: false },
+    plugins: {
+      tooltip: { mode: "nearest", intersect: false }
+    }
+  }
+});
+
+
+    /* CIN */
+    if(cinChart) cinChart.destroy();
+    cinChart = new Chart(document.getElementById("cinChart"), {
+      type:"line",
+      data:{ labels, datasets:[
+        { label:"CIN (|J/kg|)", data:cin, borderColor:"#ff6b6b", borderWidth:2, tension:0.2 }
+      ] },
+	  options: {
+    interaction: { mode: "nearest", intersect: false },
+    plugins: { 
+	  tooltip: { mode: "nearest", intersect: false }
+	  }
+    }
+});
+
+    /* LI */
+    if(liChart) liChart.destroy();
+    liChart = new Chart(document.getElementById("liChart"), {
+      type:"line",
+      data:{ labels, datasets:[
+        { label:"Lifted Index", data:li, borderColor:"#6bffc3", borderWidth:2, tension:0.2 }
+      ] },
+	  options: {
+      interaction: { mode: "nearest", intersect: false },
+      plugins: { 
+	  tooltip: { mode: "nearest", intersect: false }
+	  }
+    }
+
+});
+  }
+
+  /* ============================
+     REFRESH ALL
+  ============================ */
+  async function refreshData(center=false) {
+    const lat = parseFloat(latInput.value);
+    const lon = parseFloat(lonInput.value);
+
+    if(center){
+      marker.setLatLng([lat,lon]);
+      map.setView([lat,lon], map.getZoom());
+    }
+
+    const data = await fetchStability(lat,lon);
+    updateBadges(data, lat, lon);
+    updateCharts(data);
+  }
+
+  /* ============================
+     INITIAL RUN
+  ============================ */
+  document.getElementById("btnUpdate").onclick = () => refreshData(true);
+
+  initMap();
+  initRadarSatellite();
+  refreshData(true);
+
+});
+</script>
+
+</body>
+</html>
